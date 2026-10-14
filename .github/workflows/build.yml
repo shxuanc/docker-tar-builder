@@ -1,0 +1,36 @@
+name: Build and Push Docker Tar
+
+on:
+  workflow_dispatch:
+    inputs:
+      docker_image:
+        description: 'Docker 镜像名（如 nginx:latest）'
+        required: true
+      platform:
+        description: '目标平台'
+        required: true
+        default: 'linux/amd64'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pull image
+        run: docker pull --platform ${{ inputs.platform }} ${{ inputs.docker_image }}
+
+      - name: Save as tar
+        run: |
+          NAME=$(echo "${{ inputs.docker_image }}" | tr '/:' '__')
+          docker save ${{ inputs.docker_image }} -o ${NAME}.tar
+          echo "TAR_NAME=${NAME}.tar" >> $GITHUB_ENV
+
+      - name: Upload to private repo release
+        env:
+          GH_TOKEN: ${{ secrets.STORAGE_TOKEN }}
+        run: |
+          TAG="build-$(date +%Y%m%d-%H%M%S)"
+          gh release create "$TAG" \
+            --repo shxuanc/docker-storage \
+            --title "${{ inputs.docker_image }}" \
+            --notes "platform: ${{ inputs.platform }}" \
+            "${TAR_NAME}"
