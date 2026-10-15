@@ -1,5 +1,6 @@
 name: Build Docker Image Tar
-
+permissions:
+  contents: write
 on:
   workflow_dispatch:
     inputs:
@@ -10,11 +11,13 @@ on:
         description: '目标平台'
         required: true
         default: 'linux/amd64'
-
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Pull image
         run: docker pull --platform ${{ inputs.platform }} ${{ inputs.docker_image }}
 
