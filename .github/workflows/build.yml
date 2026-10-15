@@ -25,22 +25,64 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Print build info
+        run: |
+          echo "===== 构建信息 ====="
+          echo "镜像: ${{ inputs.docker_image }}"
+          echo "平台: ${{ inputs.platform }}"
+
       - name: Pull image
         run: docker pull --platform ${{ inputs.platform }} ${{ inputs.docker_image }}
 
       - name: Save as tar and gzip
         run: |
-          NAME=$(echo "${{ inputs.docker_image }}" | tr '/:' '__')
+          NAME=$(echo "${{ inputs.docker_image }}" | tr '/:@' '__')
           docker save ${{ inputs.docker_image }} -o ${NAME}.tar
           gzip ${NAME}.tar
           echo "TAR_NAME=${NAME}.tar.gz" >> $GITHUB_ENV
+          # 获取文件字节大小，存入环境变量
+          FILESIZE=$(stat -c %s ${NAME}.tar.gz)
+          echo "FILESIZE=$FILESIZE" >> $GITHUB_ENV
 
+      # 判断文件是否超过2GB（2*1024*1024*1024 = 2147483648 bytes）
+      - name: Judge file size
+        id: judge_size
+        run: |
+          if [[ $FILESIZE -gt 2147483648 ]]; then
+            echo "UPLOAD_MODE=artifact" >> $GITHUB_ENV
+            echo "文件大于2GB，将上传至Artifacts"
+          else
+            echo "UPLOAD_MODE=release" >> $GITHUB_ENV
+            echo "文件小于等于2GB，将上传至Release"
+          fi
+
+      # 小于等于2GB：上传Release
       - name: Upload to release
+        if: env.UPLOAD_MODE == 'release'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="build-$(date +%Y%m%d-%H%M%S)"
           gh release create "$TAG" \
             --title "${{ inputs.docker_image }}" \
-            --notes "platform: ${{ inputs.platform }}" \
+            --notes "platform: ${{ inputs.platform }}
+Build Time: $(date)
+Image: ${{ inputs.docker_image }}
+File Size: ${{ env.FILESIZE }} bytes" \
             "${TAR_NAME}"
+
+      # 大于2GB：上传Workflow Artifact（保留1天）
+      - name: Upload to Artifact
+        if: env.UPLOAD_MODE == 'artifact'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.TAR_NAME }}
+          path: ${{ env.TAR_NAME }}
+          retention-days: 1
+
+      # 清理临时文件，释放runner磁盘
+      - name: Clean temp files
+        if: always()
+        run: |
+          rm -f ${{ env.TAR_NAME }}
+          docker system prune -af
