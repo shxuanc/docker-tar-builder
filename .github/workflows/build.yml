@@ -1,4 +1,4 @@
-name: Build and Push Docker Tar
+name: Build Docker Image Tar
 
 on:
   workflow_dispatch:
@@ -24,13 +24,12 @@ jobs:
           docker save ${{ inputs.docker_image }} -o ${NAME}.tar
           echo "TAR_NAME=${NAME}.tar" >> $GITHUB_ENV
 
-      - name: Upload to private repo release
+      - name: Upload to release
         env:
-          GH_TOKEN: ${{ secrets.STORAGE_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="build-$(date +%Y%m%d-%H%M%S)"
           gh release create "$TAG" \
-            --repo shxuanc/docker-storage \
             --title "${{ inputs.docker_image }}" \
             --notes "platform: ${{ inputs.platform }}" \
             "${TAR_NAME}"
