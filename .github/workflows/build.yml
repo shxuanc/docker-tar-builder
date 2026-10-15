@@ -14,18 +14,26 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # QEMU + Buildx 多架构支持
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Pull image
         run: docker pull --platform ${{ inputs.platform }} ${{ inputs.docker_image }}
 
-      - name: Save as tar
+      - name: Save as tar and gzip
         run: |
           NAME=$(echo "${{ inputs.docker_image }}" | tr '/:' '__')
           docker save ${{ inputs.docker_image }} -o ${NAME}.tar
-          echo "TAR_NAME=${NAME}.tar" >> $GITHUB_ENV
+          gzip ${NAME}.tar
+          echo "TAR_NAME=${NAME}.tar.gz" >> $GITHUB_ENV
 
       - name: Upload to release
         env:
